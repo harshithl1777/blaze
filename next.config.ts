@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
                 source: '/api/:path*',
                 headers: [
                     { key: 'Access-Control-Allow-Credentials', value: 'true' },
-                    { key: 'Access-Control-Allow-Origin', value: 'https://localhost:5173' },
+                    { key: 'Access-Control-Allow-Origin', value: 'https://tryblaze.netlify.app' },
                     { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
                 ],
             },

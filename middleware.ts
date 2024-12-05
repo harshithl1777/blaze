@@ -11,7 +11,7 @@ export async function middleware(req: NextRequest) {
     if (req.method === 'OPTIONS') {
         const response = NextResponse.next();
         response.headers.set('Access-Control-Allow-Credentials', 'true');
-        response.headers.set('Access-Control-Allow-Origin', 'https://localhost:5173');
+        response.headers.set('Access-Control-Allow-Origin', 'https://tryblaze.netlify.app');
         response.headers.set('Access-Control-Allow-Methods', 'GET,DELETE,PATCH,POST,PUT,OPTIONS');
         response.headers.set(
             'Access-Control-Allow-Headers',
