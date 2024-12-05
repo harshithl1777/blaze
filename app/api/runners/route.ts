@@ -1,116 +1,21 @@
 import { NextRequest } from 'next/server';
-import { exec, execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { APIUtils } from '@/utils';
 
-const CONTAINER_NAME = 'scriptorium'; // Name of the predefined container
-const WORKSPACE_DIR = '/workspace'; // Directory inside the container
-const TIMEOUT_MS = 5000; // Execution timeout in ms
+const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com/submissions';
+const API_KEY = '9bb1f09993msh386164da7bb587bp19d6abjsn558acd106647'; // Replace with your Judge0 API key
 
-// Function to create a temporary file locally on the host
-function createTempFileLocally(language: string, code: string): string {
-    const tempDir = path.join(process.cwd(), 'temp');
-    if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    const filename = language === 'Java' ? 'Main.java' : `${uuidv4()}.${getFileExtension(language)}`;
-    const filePath = path.join(tempDir, filename);
-
-    fs.writeFileSync(filePath, code);
-
-    return filePath;
-}
-
-// Function to copy the file to the Docker container
-function copyFileToContainer(filePath: string, containerPath: string): void {
-    try {
-        execSync(`docker cp "${filePath}" ${CONTAINER_NAME}:${containerPath}`);
-    } catch (error) {
-        console.error('Error copying file to container', error);
-        throw new Error('Failed to copy file to container');
-    }
-}
-
-// Function to clean up the container file after execution
-function cleanupContainerFile(containerFilePath: string): void {
-    execSync(`docker exec ${CONTAINER_NAME} rm -f ${containerFilePath}`);
-}
-
-// Function to create a temporary input file for stdin (with multiple inputs)
-function createTempInputFile(inputs: string[]): string {
-    const tempDir = path.join(process.cwd(), 'temp');
-    if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-    }
-
-    // Join multiple inputs with a newline character (or any other separator)
-    const inputData = inputs.join('\n');
-    const inputFilename = `${uuidv4()}.txt`;
-    const inputFilePath = path.join(tempDir, inputFilename);
-    fs.writeFileSync(inputFilePath, inputData);
-
-    return inputFilePath; // Ensure this file is created locally before copying
-}
-
-// Get file extension based on language
-function getFileExtension(language: string): string {
-    switch (language) {
-        case 'C':
-            return 'c';
-        case 'C++':
-            return 'cpp';
-        case 'Java':
-            return 'java';
-        case 'Python':
-            return 'py';
-        case 'JavaScript':
-            return 'js';
-        case 'Ruby':
-            return 'rb';
-        case 'Go':
-            return 'go';
-        case 'PHP':
-            return 'php';
-        case 'Rust':
-            return 'rs';
-        case 'Swift':
-            return 'swift';
-        default:
-            throw new Error('Unsupported language');
-    }
-}
-
-// Generate the command based on the language to execute the code
-function getCommand(language: string, filePath: string, inputFilePath: string | null): string {
-    const inputRedirection = inputFilePath ? `< ${inputFilePath}` : '';
-    switch (language) {
-        case 'C':
-            return `gcc "${filePath}" -o "${filePath}.out" && "${filePath}.out" ${inputRedirection}`;
-        case 'C++':
-            return `g++ "${filePath}" -o "${filePath}.out" && "${filePath}.out" ${inputRedirection}`;
-        case 'Java':
-            return `javac "${filePath}" && java -cp "${WORKSPACE_DIR}" Main ${inputRedirection}`;
-        case 'Python':
-            return `python3 "${filePath}" ${inputRedirection}`;
-        case 'JavaScript':
-            return `node "${filePath}" ${inputRedirection}`;
-        case 'Ruby':
-            return `ruby "${filePath}" ${inputRedirection}`;
-        case 'Go':
-            return `go run "${filePath}" ${inputRedirection}`;
-        case 'PHP':
-            return `php "${filePath}" ${inputRedirection}`;
-        case 'Rust':
-            return `rustc "${filePath}" && "${filePath}" ${inputRedirection}`;
-        case 'Swift':
-            return `swift "${filePath}" ${inputRedirection}`;
-        default:
-            throw new Error('Unsupported language');
-    }
-}
+const languageIdMap = {
+    C: 50,
+    'C++': 54,
+    Python: 71, // Judge0 uses Python 3 for this ID
+    Java: 62,
+    JavaScript: 63,
+    PHP: 55,
+    Go: 36,
+    Swift: 43,
+    Ruby: 72,
+    Rust: 40,
+};
 
 // Main POST function to handle the code execution request
 export async function POST(req: NextRequest) {
@@ -121,77 +26,98 @@ export async function POST(req: NextRequest) {
         return APIUtils.createNextResponse({ success: false, status: 400, message: 'Code and language are required' });
     }
 
-    return new Promise((resolve) => {
-        try {
-            // Step 1: Create the temp file locally with the code
-            const localFilePath = createTempFileLocally(language, code);
+    // Get the language ID using the languageIdMap
+    const languageId = languageIdMap[language];
 
-            // Step 2: Copy the local code file to the container
-            const containerPath = `${WORKSPACE_DIR}/${path.basename(localFilePath)}`;
-            copyFileToContainer(localFilePath, containerPath);
+    if (!languageId) {
+        return APIUtils.createNextResponse({
+            success: false,
+            status: 400,
+            message: 'Unsupported language',
+        });
+    }
 
-            // (Optional) Clean up the local code file after it's copied
-            fs.unlinkSync(localFilePath);
+    // Prepare the request body for Judge0 submission
+    const submissionData = {
+        source_code: code,
+        language_id: languageId,
+        stdin: stdin || '', // Provide stdin if it's passed, else default to empty
+        base64_encoded: false,
+        wait: true, // We want to wait for the result before returning
+    };
 
-            // Step 3: Create an input file if stdin is provided
-            let inputFilePath: string | null = null;
-            if (stdin && Array.isArray(stdin)) {
-                inputFilePath = createTempInputFile(stdin); // stdin is an array of multiple inputs
-            }
+    // Send the request to Judge0 to create a submission
+    try {
+        const response = await fetch(JUDGE0_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-rapidapi-host': 'judge0-ce.p.rapidapi.com',
+                'x-rapidapi-key': API_KEY,
+            },
+            body: JSON.stringify(submissionData),
+        });
 
-            // Step 4: Copy the input file to the container if it exists
-            if (inputFilePath) {
-                const inputContainerPath = `${WORKSPACE_DIR}/${path.basename(inputFilePath)}`;
-                copyFileToContainer(inputFilePath, inputContainerPath);
-                fs.unlinkSync(inputFilePath); // Clean up the local input file
-            }
+        const data = await response.json();
 
-            // Step 5: Prepare the command to execute the code
-            const command = getCommand(
-                language,
-                containerPath,
-                inputFilePath ? `${WORKSPACE_DIR}/${path.basename(inputFilePath)}` : null,
-            );
+        // Check if submission was successful
+        if (data.token) {
+            // Poll for submission result
+            const result = await pollSubmissionResult(data.token);
 
-            const startTime = Date.now();
+            // Create a formatted response
+            const responsePayload = {
+                stdout: result.stdout,
+                stderr: result.stderr,
+                timeTaken: result.time,
+                success: result.status && result.status.id === 3,
+            };
 
-            exec(
-                `docker exec ${CONTAINER_NAME} bash -c "${command}"`,
-                { timeout: TIMEOUT_MS, maxBuffer: 1024 * 1024 },
-                (error, stdout, stderr) => {
-                    const endTime = Date.now();
-                    const timeTaken = endTime - startTime;
-
-                    // Step 6: Clean up files in the container
-                    cleanupContainerFile(containerPath);
-                    if (inputFilePath) cleanupContainerFile(`${WORKSPACE_DIR}/${path.basename(inputFilePath)}`);
-
-                    const response = {
-                        stdout: stdout.trim(),
-                        stderr: stderr.trim(),
-                        timeTaken,
-                        success:
-                            !error ||
-                            (error && !error.killed && (!error.message.includes('ENOMEM') || error.code === undefined)),
-                    };
-
-                    if (error) {
-                        if (error.killed) {
-                            response.stderr = 'Error: Execution timed out. Please optimize your code and try again.';
-                            response.success = false;
-                        } else if (error.message.includes('ENOMEM')) {
-                            response.stderr =
-                                'Error: Execution failed due to memory limits. Please optimize your code and try again.';
-                            response.success = false;
-                        }
-                    }
-
-                    resolve(APIUtils.createNextResponse({ success: true, status: 200, payload: response }));
-                },
-            );
-        } catch (error: any) {
-            APIUtils.logError(error);
-            resolve(APIUtils.createNextResponse({ success: false, status: 500, message: error.toString() }));
+            return APIUtils.createNextResponse({ success: true, status: 200, payload: responsePayload });
+        } else {
+            console.log(data);
+            return APIUtils.createNextResponse({
+                success: false,
+                status: 500,
+                message: 'Failed to create submission',
+            });
         }
-    });
+    } catch (error) {
+        APIUtils.logError(error);
+        return APIUtils.createNextResponse({ success: false, status: 500, message: error.message });
+    }
+}
+
+// Helper function to poll Judge0 for submission result
+async function pollSubmissionResult(token: string) {
+    const MAX_POLL_ATTEMPTS = 5;
+    const POLL_INTERVAL = 2000; // 2 seconds between polls
+
+    let attempts = 0;
+    let result = null;
+
+    while (attempts < MAX_POLL_ATTEMPTS) {
+        try {
+            const response = await fetch(`${JUDGE0_API_URL}/${token}?base64_encoded=false`, {
+                method: 'GET',
+                headers: {
+                    'x-rapidapi-key': API_KEY,
+                },
+            });
+
+            result = await response.json();
+
+            // If the result is available (status is not 'processing')
+            if (![1, 2].includes(result.status?.id)) {
+                return result; // Return the final result
+            }
+        } catch (error) {
+            console.error('Error while polling Judge0:', error);
+        }
+
+        attempts++;
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+    }
+
+    throw new Error('Polling timed out. Could not get result from Judge0.');
 }

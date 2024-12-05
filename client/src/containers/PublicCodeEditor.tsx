@@ -344,7 +344,7 @@ const PublicCodeEditor = ({ template }: { template: CodeTemplate }) => {
                     )}
                     {output.runtime && (
                         <div className='py-1 px-2 font-firaCode ml-auto block bg-[#8F6424] text-xs rounded-md'>
-                            {formatTime(output.runtime)}
+                            {formatTime(parseFloat(output.runtime) * 1000)}
                         </div>
                     )}
                 </div>

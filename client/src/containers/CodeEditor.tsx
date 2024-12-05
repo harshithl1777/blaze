@@ -253,7 +253,7 @@ const CodeEditor = ({ template }: { template: CodeTemplate }) => {
                     </Button>
                     {output.runtime && (
                         <div className='py-1 px-2 font-firaCode ml-auto block bg-[#8F6424] text-xs rounded-md'>
-                            {formatTime(output.runtime)}
+                            {formatTime(parseFloat(output.runtime) * 1000)}
                         </div>
                     )}
                 </div>
@@ -261,7 +261,9 @@ const CodeEditor = ({ template }: { template: CodeTemplate }) => {
                     <div className='text-slate-500 dark:text-slate-500'>{osInfo}</div>
                     <div
                         className={`!mt-4 ${
-                            output.success ? 'text-teal-950 dark:text-teal-50' : 'text-rose-500 font-semibold'
+                            output.success
+                                ? 'text-teal-950 dark:text-teal-50 whitespace-pre-wrap'
+                                : 'text-rose-500 font-semibold whitespace-pre-wrap'
                         }`}
                     >
                         {output.content}
