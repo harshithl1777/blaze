@@ -41,9 +41,7 @@
         "react-markdown": "^9.0.1",
         "react-router-dom": "^7.0.1",
         "react-syntax-highlighter": "^15.6.1",
-        "remark-gfm": "^4.0.0"
-    },
-    "devDependencies": {
+        "remark-gfm": "^4.0.0",
         "@eslint/js": "^9.15.0",
         "@tailwindcss/typography": "^0.5.15",
         "@types/node": "^22.10.1",
