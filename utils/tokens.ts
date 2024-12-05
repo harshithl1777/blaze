@@ -11,7 +11,7 @@ class TokenUtils {
     static refreshTokenCookieOptions = {
         httpOnly: true,
         secure: true,
-        sameSite: (this.isProduction ? 'Strict' : 'None') as 'Strict' | 'None',
+        sameSite: 'None',
         path: '/api/sessions',
         maxAge: this.refreshTokenExpiresInMS,
     };
